@@ -1,0 +1,24 @@
+name: Host-only checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  unittest-and-syntax:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Host tools only
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools fakeroot bubblewrap patch rsync binutils
+      - name: Unit tests (no firmware, network or device required)
+        run: python3 -m unittest discover -s tests -v
+      - name: Compile Python and check shell syntax without execution
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+        run: |
+          python3 -m compileall -q api tools tests
+          for f in scripts/*.sh diagnostic/*.sh; do bash -n "$f"; done
+          bash -n packages.sh
+          node --check api/static/app.js

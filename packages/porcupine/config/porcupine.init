@@ -1,0 +1,72 @@
+#!/bin/sh /etc/rc.common
+
+START=98
+USE_PROCD=1
+
+EXTRA_COMMANDS="status toggle"
+CONFIG=/data/listener
+PIDFILE=/var/run/listener.pid
+[ -z "$SILENT" ] && SILENT=0
+
+start_service() {
+  if [ ! -f "${CONFIG}" ]; then
+    echo "[listener] WARNING: config file not found, exiting." | tee -a /dev/kmsg
+    return 0
+  fi
+
+  # unmute led
+  /bin/shut_led 7 &
+
+  if [ `cat /proc/uptime | awk '{print $1}' | cut -d '.' -f1` -ge 30 ]; then
+  [ "$SILENT" != "1" ] && miplay sound unmute
+  fi
+
+  procd_open_instance
+  procd_set_param command /usr/bin/porcupine_launcher
+  procd_set_param respawn 3600 5 0
+  procd_set_param pidfile ${PIDFILE}
+  procd_close_instance
+}
+
+stop_service() {
+  [ -f "$CONFIG" ] && . $CONFIG
+
+  if [ -z "$MUTE_LED" ] || [ "$MUTE_LED" != "0" ]; then
+    # mute led
+    /bin/show_led 7 &
+  fi
+
+  # stop listening process to avoid orphan
+  killall -q /usr/bin/porcupine
+
+  [ "$SILENT" != "1" ] && miplay sound mute
+}
+
+service_triggers() {
+  procd_add_reload_trigger "$CONFIG"
+}
+
+reload_service() {
+  SILENT=1
+  stop
+  sleep 1
+  start
+}
+
+toggle() {
+  if [ -f "${PIDFILE}" ] && [ -e /proc/`cat ${PIDFILE}`/status ]; then
+    stop
+  else
+    start
+  fi
+}
+
+status() {
+  if [ -f "${PIDFILE}" ] && [ -e /proc/`cat ${PIDFILE}`/status ]; then
+    echo "listener is running."
+    return 0
+  else
+    echo "listener is stopped."
+    return 1
+  fi
+}

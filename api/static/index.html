@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LX06 本地音箱</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a2b39; background: #f3f6f8; }
+    * { box-sizing: border-box; } body { margin: 0; line-height: 1.5; }
+    .wrap { max-width: 980px; margin: auto; padding: 22px 18px 52px; }
+    header { background: #17354b; color: white; } header .wrap { padding-top: 28px; padding-bottom: 28px; }
+    header p { margin: 0; color: #c9e0e9; } h1 { margin: 3px 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    main { display: grid; gap: 18px; } h2 { margin: 0 0 5px; font-size: 1.25rem; } h3 { margin: 0 0 8px; font-size: 1rem; }
+    .panel { background: white; border: 1px solid #dce5eb; border-radius: 16px; padding: 22px; box-shadow: 0 7px 26px #17354b0b; }
+    .hint { color: #536879; margin: 0 0 12px; } .status { min-height: 1.5em; margin: 8px 0 14px; color: #536879; }
+    .error { color: #a82d36; } .success { color: #147347; }
+    .facts, .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .facts { margin: 0; } .fact { min-width: 0; background: #f4f8fa; border-radius: 10px; padding: 11px 14px; }
+    dt { color: #587082; font-size: .82rem; } dd { margin: 3px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+    .volume-list, .instances { display: grid; gap: 10px; } .volume-row, .instance { border: 1px solid #e0e8ed; border-radius: 11px; padding: 13px; }
+    .volume-top, .volume-actions, .instance { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .volume-row input[type=range] { width: 100%; margin: 14px 0 8px; accent-color: #0b7585; } .volume-actions .status { margin: 0; flex: 1; }
+    button { border: 0; border-radius: 9px; background: #0b7082; color: white; padding: 9px 17px; font: inherit; font-weight: 600; cursor: pointer; }
+    button:hover { background: #07586b; } button:disabled { opacity: .55; cursor: wait; }
+    input[type=text], input[type=url], select { width: 100%; min-height: 42px; border: 1px solid #aebdc8; border-radius: 8px; padding: 8px 10px; font: inherit; }
+    label { display: block; font-weight: 600; margin-bottom: 5px; } .fields { margin-bottom: 16px; }
+    .url-form { display: flex; gap: 10px; margin: 12px 0; } .url-form input { flex: 1; min-width: 0; }
+    .instance div { min-width: 0; overflow-wrap: anywhere; } .instance p { margin: 0; color: #536879; }
+    .setup { border-top: 1px solid #e0e8ed; margin-top: 20px; padding-top: 20px; } ul { margin-bottom: 0; padding-left: 22px; }
+    @media (max-width: 620px) { .facts, .fields { grid-template-columns: 1fr; } .panel { padding: 17px; } .url-form, .instance { align-items: stretch; flex-direction: column; } .url-form button, .instance button { width: 100%; } }
+  </style>
+</head>
+<body>
+<header><div class="wrap"><p>LOCAL SPEAKER · LX06</p><h1 id="hostname">本地音箱</h1><p>设备信息与音量控制</p></div></header>
+<main class="wrap">
+  <section class="panel" aria-labelledby="device-heading">
+    <h2 id="device-heading">设备状态</h2><p id="device-status" class="status" role="status">正在读取设备信息…</p>
+    <dl class="facts">
+      <div class="fact"><dt>设备名称</dt><dd id="device-hostname">—</dd></div>
+      <div class="fact"><dt>IP 地址</dt><dd id="device-ip">—</dd></div>
+      <div class="fact"><dt>型号</dt><dd id="device-model">—</dd></div>
+      <div class="fact"><dt>运行时间</dt><dd id="device-uptime">—</dd></div>
+      <div class="fact"><dt>ROM / 版本</dt><dd id="device-version">—</dd></div>
+    </dl>
+  </section>
+  <section class="panel" aria-labelledby="volume-heading">
+    <h2 id="volume-heading">音量</h2><p class="hint">调整滑块后点击“应用”才会写入设备。</p>
+    <p id="volume-status" class="status" role="status">正在读取音量…</p><div id="volume-list" class="volume-list"></div>
+  </section>
+  <section class="panel" aria-labelledby="listen-heading">
+    <h2 id="listen-heading">如何收听</h2>
+    <ul><li>AirPlay：在播放设备的 AirPlay 列表中选择此音箱的设备名称。</li><li>蓝牙：快速按三次播放键进入配对，然后在手机蓝牙设置中选择音箱。</li></ul>
+  </section>
+  <section class="panel" aria-labelledby="ha-heading">
+    <h2 id="ha-heading">Home Assistant · 可选</h2><p class="hint">仅在需要语音助手集成时连接 Home Assistant。</p>
+    <h3>局域网发现</h3><p id="discover-status" class="status" role="status">正在查找 Home Assistant…</p><div id="instance-list" class="instances"></div>
+    <div class="setup">
+      <h3>手动连接</h3>
+      <form class="url-form" action="/auth" method="post"><input type="url" id="ha-url" name="url" placeholder="http://homeassistant.local:8123" aria-label="Home Assistant 地址" required><button type="submit">连接 Home Assistant</button></form>
+      <p id="config-status" class="status" role="status">正在读取集成状态…</p>
+      <div id="config-section" hidden>
+        <h3>已连接的语音配置</h3>
+        <form id="config-form" action="/config" method="post">
+          <div class="fields">
+            <div><label for="ha_stt_provider">语音识别提供方</label><input type="text" id="ha_stt_provider" name="ha_stt_provider" placeholder="stt.home_assistant_cloud" required></div>
+            <div><label for="stt_language">识别语言</label><input type="text" id="stt_language" name="stt_language" required></div>
+            <div><label for="tts_language">语音合成语言</label><input type="text" id="tts_language" name="tts_language" required></div>
+            <div><label for="word">唤醒词</label><select id="word" name="word" required><option value="">请选择唤醒词</option></select></div>
+          </div>
+          <button type="submit">保存语音配置</button>
+        </form>
+        <p id="wakeword-status" class="status" role="status"></p>
+      </div>
+    </div>
+  </section>
+</main>
+<noscript><p class="wrap">此页面需要启用 JavaScript 才能显示设备状态和音量；Home Assistant 连接表单仍可提交。</p></noscript>
+<script src="/app.js?v=lx06-panel-1" defer></script>
+</body>
+</html>

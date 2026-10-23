@@ -1,0 +1,27 @@
+PACKAGE_NAME="ZZIPlib"
+PACKAGE_VERSION="0.13.72"
+PACKAGE_SRC="https://github.com/gdraheim/zziplib/archive/v${PACKAGE_VERSION}.tar.gz"
+
+configure_package() {
+	PKG_CONFIG_LIBDIR="${BUILD_PKG_CONFIG_LIBDIR}" \
+	PKG_CONFIG_SYSROOT_DIR="${BUILD_PKG_CONFIG_SYSROOT_DIR}" \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_CMAKE_SYSROOT} \
+		-DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} \
+		${PACKAGE_SRC_DIR}
+}
+
+#configure_package() {
+#	CC="${BUILD_CC}" CFLAGS="${BUILD_CFLAGS}" LDFLAGS="${BUILD_LDFLAGS}" \
+#	   CXX="${BUILD_CXX}" CXXFLAGS="${BUILD_CFLAGS}" CPPFLAGS="${BUILD_CFLAGS}" \
+#	   PKG_CONFIG_LIBDIR="${BUILD_PKG_CONFIG_LIBDIR}" PKG_CONFIG_SYSROOT_DIR="${BUILD_PKG_CONFIG_SYSROOT_DIR}" \
+#	   ./configure --prefix=${INSTALL_PREFIX} --build=${MACHTYPE} --host=${BUILD_TARGET}
+#}
+
+make_package() {
+	make -j${MAKE_JOBS}
+}
+
+install_package() {
+	make DESTDIR=${STAGING_DIR} install
+}

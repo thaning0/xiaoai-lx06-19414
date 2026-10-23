@@ -1,0 +1,38 @@
+{
+  "source_date_epoch": 1770618789,
+  "cryptographic_signature_verified": false,
+  "downloads": [
+    {
+      "filename": "mico_all_ce7185fc5_1.94.14.bin",
+      "size": 43478680,
+      "sha256": "38428e73499ad832dd42c13492b391aa369b9c41d69fd46106707e671a84e27f",
+      "url": "https://cdn.cnbj1.fds.api.mi-img.com/xiaoqiang/rom/lx06/mico_all_ce7185fc5_1.94.14.bin",
+      "purpose": "1.94.14 stock source"
+    },
+    {
+      "filename": "mico_firmware_9c712_1.74.10.bin",
+      "size": 41954280,
+      "sha256": "bd88b2611495acb8bfab658150c8a99b515551d6a0851a2d9725c798640633b3",
+      "url": "https://cdn.cnbj1.fds.api.mi-img.com/xiaoqiang/rom/lx06/mico_firmware_9c712_1.74.10.bin",
+      "purpose": "release diff baseline only; not hardware-supported"
+    },
+    {
+      "filename": "mico_firmware_080b2a0_260329_lx06.tar",
+      "size": 40673280,
+      "sha256": "0e4edc5de66118ff23f6bcf321851421468c2e1fad62a9df697495608c2584de",
+      "url": "https://github.com/duhow/xiaoai-patch/releases/download/2026.3.26/mico_firmware_080b2a0_260329_lx06.tar",
+      "purpose": "rootfs diff reuse only; never execute update.sh or use boot.img",
+      "source": "fb070495955668f825700bbd988d5443e9bcadb3"
+    }
+  ],
+  "extracted_rootfs": {
+    "1.94.14": {
+      "size": 37501023,
+      "sha256": "bdcac4449491bfaa9b3960ee006fd6e4932a9dae4473736fc808564d5eab7439"
+    },
+    "1.74.10": {
+      "size": 36703430,
+      "sha256": "378d6d654a8138f36588f682d3da3a67dca956f2fc863b01c588ef4d3759cd41"
+    }
+  }
+}

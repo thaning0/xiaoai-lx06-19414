@@ -1,0 +1,22 @@
+PACKAGE_NAME="bash"
+PACKAGE_VERSION="5.2"
+PACKAGE_SRC="https://github.com/bminor/bash/archive/refs/tags/bash-${PACKAGE_VERSION}.tar.gz"
+PACKAGE_DEPENDS="base glibc"
+
+configure_package() {
+	CC=${BUILD_CC} CFLAGS="-Os" ./configure \
+	   --prefix=${INSTALL_PREFIX} --build=${MACHTYPE} --host=${BUILD_TARGET} \
+	   --enable-static-link
+}
+
+make_package() {
+	CC=${BUILD_CC} make -j${MAKE_JOBS}
+}
+
+install_package() {
+	CC=${BUILD_CC} make DESTDIR=${STAGING_DIR} install
+}
+
+postinstall_package() {
+        rm -rvf ${STAGING_DIR}/usr/share/bash
+}

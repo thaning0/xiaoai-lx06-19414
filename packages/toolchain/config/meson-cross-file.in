@@ -1,0 +1,19 @@
+[host_machine]
+system = 'linux'
+cpu_family = 'arm'
+cpu = 'any'
+endian = 'little'
+
+[properties]
+c_args = '${BUILD_CFLAGS} -I${STAGING_DIR}/${INSTALL_PREFIX}/${BUILD_TARGET}/include --sysroot=${STAGING_DIR}'
+c_link_args = '${BUILD_LDFLAGS} --sysroot=${STAGING_DIR}'
+cpp_args = '${BUILD_CFLAGS} -I${STAGING_DIR}/${INSTALL_PREFIX}/${BUILD_TARGET}/include --sysroot=${STAGING_DIR}'
+cpp_link_args = '${BUILD_LDFLAGS} --sysroot=${STAGING_DIR}'
+
+[binaries]
+c = '${BUILD_CC}'
+cpp = '${BUILD_CXX}'
+ar = '${BUILD_AR}'
+objcopy = '${BUILD_OBJCOPY}'
+strip = '${BUILD_STRIP}'
+pkgconfig = '/usr/bin/pkg-config'

@@ -1,0 +1,95 @@
+{
+  "profile": "lx06/1.94.14",
+  "choice": "default-open-audio-replacement",
+  "metadata": {
+    "HARDWARE": "LX06",
+    "ROM": "1.94.14",
+    "BUILDTS": "1770618789",
+    "GTAG": "commit b9e9b6640c2491c7a77a22612e47790e6c8c0356"
+  },
+  "metadata_sha256": "5bfc394b9585b8f554130277a61cb31d574f9b1262aa08ebd577c55951b743c7",
+  "source_squashfs_sha256": "bdcac4449491bfaa9b3960ee006fd6e4932a9dae4473736fc808564d5eab7439",
+  "patch_sha256": "901f3137fc599ddea05f242d2e54f44e2ef504bbdca98aadbd99a84550dd811c",
+  "targets": {
+    "etc/config/dropbear": {
+      "sha256": "35f340f5019f104bb894354b4033df660a6de6d8cbfb84ada87dea249d881175",
+      "result_sha256": "cc3056b9abff0e1f88f544372b1400d50e2b5301ef209672375832d9a906a0ee"
+    },
+    "etc/init.d/dropbear": {
+      "sha256": "cc64cf16f9bb6ca7ddd17843284dcfbf62b41449b08bf6cd0cfcbbb2e8d771b3",
+      "result_sha256": "5ac1da7382b5ee15ca0a648efcbc576492b32b8c948e1387a57eb1f28463a244"
+    },
+    "etc/inittab": {
+      "sha256": "aa5a11ec3cec7942efa727fc7a0588171fa98573175b04be81ff671321742025",
+      "result_sha256": "ed6e06d71332c0afc6914ffc2e56113875388d322829480a3351572fe398092a"
+    },
+    "etc/init.d/bluetooth": {
+      "sha256": "2d4d07b39c0720b51469a3b80ada30d6c35694f75dbe64c6c4050017d0992673",
+      "result_sha256": "4ed2e2d8b6ac8605b666653026b497b584afd8fb568e951b90fa835c8d73d7fd"
+    },
+    "etc/init.d/bluetoothd": {
+      "sha256": "048a74b947386dc352602cb5d89fb1cae6f51a899fe404e11a04b209a9edb847",
+      "result_sha256": "6de783e41df4f8b1f85dfbfc249944bf677fc8a617f3d71be721ab6cd1736cdd"
+    },
+    "etc/init.d/pns": {
+      "sha256": "911e6326b7862f832fc037e04eb2236b1ed38968b417647ae00cbdad0052d0ac",
+      "result_sha256": "f1a13eca3565a77996e4146349eabdd2ada5666f69546ea2f1077e23722bdd55"
+    },
+    "etc/init.d/dhcpc": {
+      "sha256": "aa42677baeecf618375fccd526671066ff57dfa781ffbb9b43195b39cfacf4cf",
+      "result_sha256": "059afe116eb86471a849608031e9dad002d89a22af500d8fab0d2820b9bdf147"
+    },
+    "etc/asound.conf": {
+      "sha256": "96cdc075b1d372353fe5ea9c0ee66321cb2fa4f36eb42c1ca65b68ff886db705",
+      "result_sha256": "72472b28031067200844af8a9f59f5b8b3d8c951e7853773560e582a47f3605e"
+    },
+    "usr/sbin/boot_function.sh": {
+      "sha256": "aa2bcbd68f3801e4e6f8565db3b8ed3af9ddf94085d00d674345608bd6bf7987",
+      "result_sha256": "5d63fe1a9a1f8394ed091d534cd8c014770fc0246153fbcceb8ddb1ae939a09b"
+    },
+    "etc/init.d/done": {
+      "sha256": "a8c3fa577f0ce3f6f2990f3c4f9bc166953bea6e3088b2fc3d5b7b256ed1c57e",
+      "result_sha256": "98a8f8510004743be4903373d230c27098e623aee4f8ad1515f491fc0b1e0858"
+    },
+    "etc/init.d/adbd": {
+      "sha256": "7a8a5dc084280d8f23c8ab2f8305681696d7f52ae636d6e6d64638495e04d514",
+      "result_sha256": "492d9739dbd920063596cf0fd267d250c81ce17f4eb708823ecf810832baea06"
+    },
+    "etc/pam.d/common-auth": {
+      "sha256": "5cd676afe52a923fce00df42e662f181ccfebd452cfd1bfaf6cdd7a5457c2820",
+      "result_sha256": "451e424c671d77f492cd87151848301b74412892427714ecf9e6ef74a8e24a85"
+    },
+    "etc/pam.conf": {
+      "sha256": "18f4f0ec36cf5a1adb1c219f0a22bb30353d9b94595765d4db62908550d1f3ea",
+      "result_sha256": "cb0482f0b3b44a3bb89d80d14fe51b107be7a2b6797a81d3b853e58e1fa4450c"
+    },
+    "etc/init.d/boot": {
+      "sha256": "8c404213a3ec2177e0f5b7cbc3eccd6bfd4dd9e754e809157f23a3016baad062",
+      "result_sha256": "15922dd25d0b8b7a5bfde5819927431ec0619d4db585a89ae197ad1f9aa80ed8"
+    },
+    "etc/init.d/alsa": {
+      "sha256": "9b09168fced13a9030f32fd70218dfe185bb353fe863b19eba26039e37b256aa",
+      "result_sha256": "9b09168fced13a9030f32fd70218dfe185bb353fe863b19eba26039e37b256aa",
+      "unchanged": true
+    },
+    "etc/init.d/wireless": {
+      "sha256": "954ac4ee47b8fc49eda2725d00466f9740d903d67cef0409a9bbb6e86e0f7a24",
+      "result_sha256": "6726de07ccb01cb29d1eede2d9293603da0a96de7a4925269d62ce8c54459540"
+    },
+    "etc/asound.conf.dts": {
+      "sha256": "9ffbd6c3107dc05ffbae4c3787877d17c1a2ec8a3ca9ccbc9bb78bcbe44e03db",
+      "result_sha256": "7a78706d4c4e1da9307f854fe9f9b8ddb77381c13eea1835dfbfc67016c2a455"
+    },
+    "bin/wpa_action.sh": {
+      "sha256": "12c650be572c53f779fdd710d303095279995ea26f5a1c02992acb00e1ae3b19",
+      "result_sha256": "1e7b4589e4d9728b122d5a22d8e1ebc3d8d579fe6988f7b37e7e0c7dc9722922"
+    }
+  },
+  "upstream_base": "c26bef82ed703b50e1c04b618b0f3106061dd301",
+  "source_ota": {
+    "url": "https://cdn.cnbj1.fds.api.mi-img.com/xiaoqiang/rom/lx06/mico_all_ce7185fc5_1.94.14.bin",
+    "md5": "b66fe108ee32afdfaf020cace7185fc5",
+    "sha256": "38428e73499ad832dd42c13492b391aa369b9c41d69fd46106707e671a84e27f",
+    "cryptographic_signature_verified": false
+  }
+}

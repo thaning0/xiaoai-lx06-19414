@@ -1,0 +1,956 @@
+--- a/etc/config/dropbear
++++ b/etc/config/dropbear
+@@ -4,3 +4,4 @@
+ 	option Port         '22'
+ 	option BannerFile   '/etc/banner'
+ 	option rsakeyfile '/data/etc/dropbear/dropbear_rsa_host_key'
++	option mdns '0'
+--- a/etc/init.d/dropbear
++++ b/etc/init.d/dropbear
+@@ -30,11 +30,11 @@
+ validate_section_dropbear()
+ {
+ 	uci_validate_section dropbear dropbear "${1}" \
+-		'PasswordAuth:bool:0' \
++		'PasswordAuth:bool:1' \
+ 		'enable:bool:1' \
+ 		'Interface:string' \
+ 		'GatewayPorts:bool:0' \
+-		'RootPasswordAuth:bool:0' \
++		'RootPasswordAuth:bool:1' \
+ 		'RootLogin:bool:1' \
+ 		'rsakeyfile:file' \
+ 		'BannerFile:file' \
+@@ -118,18 +118,6 @@
+ 
+ start_service()
+ {
+-	[ x"bluetooth" == x`micocfg_work_mode` ] && {
+-        logger -t dropbear.init.d -p 3  "in bluetooth mode, will not start"
+-        return
+-    }
+-
+-	ssh_en=`cat /data/ssh_en 2>/dev/null`
+-	ssh_en_bind=`cat /data/.ssh_en 2>/dev/null`
+-	ssh_en_tmp=`cat /tmp/ssh_en 2>/dev/null`
+-	channel=`micocfg_channel 2>/dev/null`
+-	if [ "$ssh_en" != "1" -a "$ssh_en_bind" != "1" -a "$ssh_en_tmp" != "1" -a "$channel" = "release" ]; then
+-		return 0                                                                                  
+-	fi
+ 	[ -s /data/etc/dropbear/dropbear_rsa_host_key ] || keygen
+ 
+ 	. /lib/functions.sh
+--- a/etc/inittab
++++ b/etc/inittab
+@@ -1,5 +1,5 @@
+ ::sysinit:/etc/init.d/rcS S boot
+ ::shutdown:/etc/init.d/rcS K shutdown
+ tts/0::askfirst:/bin/ash --login
+-ttyS0::askfirst:/bin/login
++ttyS0::askfirst:/bin/ash --login
+ tty1::askfirst:/bin/ash --login
+--- a/etc/init.d/bluetooth
++++ b/etc/init.d/bluetooth
+@@ -12,47 +12,34 @@
+ fi
+ PROG1=/usr/bin/bluealsa
+ PROG2=/usr/bin/bluealsa-aplay
+-PROG3=/usr/bin/bluez_mibt_classical
+-PROG5=/usr/bin/bluez_mibt_ble
++ALSA_MIXER=bluetooth
++
++function bluealsa_get_codecs() {
++	CODECS=""
++	for NAME in `bluealsa --help  | grep -i -A5 "Available BT audio codecs:" | grep "a2dp-sink:" | awk '{$1=""; print $0}' | tr -d ','` ; do
++		CODECS="${CODECS} -c ${NAME}"
++	done
++}
+ 
+ function bluealsa_start() {
++	bluealsa_get_codecs
++
+ 	procd_open_instance
+ 	if [ $DEBUG = "1" ]; then
+-		procd_set_param command "$PROG1" -i hci0 -p a2dp-sink -S
++		procd_set_param command "$PROG1" -i hci0 -p a2dp-sink -S ${CODECS}
+ 	else
+-		procd_set_param command "$PROG1" -i hci0 -p a2dp-sink
++		procd_set_param command "$PROG1" -i hci0 -p a2dp-sink ${CODECS}
+ 	fi
+ 	procd_append_param respawn 3600
+ 	procd_append_param respawn 5
+ 	procd_append_param respawn 5
+ 	procd_close_instance
+ 
+-	# procd_open_instance
+-	# procd_set_param command "$PROG2" 00:00:00:00:00:00 -vv -i hci0 -d default --profile-a2dp --stereo-audio
+-	# procd_set_param respawn
+-	# procd_append_param respawn 3600
+-	# procd_append_param respawn 5
+-	# procd_append_param respawn 5
+-	# procd_close_instance
+-}
+-
+-function bluez_mibt_classical_start() {
+ 	procd_open_instance
+-	procd_set_param command "$PROG3"
+-	procd_append_param respawn 3600
+-	procd_append_param respawn 5
+-	procd_append_param respawn 5
++	procd_set_param command "$PROG2" 00:00:00:00:00:00 -vv -D "$ALSA_MIXER" --profile-a2dp
++	procd_set_param respawn 3600 5 5
+ 	procd_close_instance
+ }
+-
+-# function bluez_mibt_ble_start() {
+-# 	procd_open_instance
+-# 	procd_set_param command "$PROG5"
+-# 	procd_append_param respawn 3600
+-# 	procd_append_param respawn 5
+-# 	procd_append_param respawn 5
+-# 	procd_close_instance
+-# }
+ 
+ function bluez_start() {
+ 	count=0
+@@ -66,15 +53,6 @@
+ 
+ 	echo "bluealsa_start"
+ 	bluealsa_start
+-	sleep 2
+-	echo "bluez_mibt_classical_start"
+-	bluez_mibt_classical_start
+-
+-	[ ! -f "/data/status/config_done" ] && {
+-		# echo "mibt Start BLE"
+-		# bluez_mibt_ble_start
+-		/etc/init.d/bluetooth_ble start
+-	}
+ }
+ 
+ function marvell_setup() {
+--- a/etc/init.d/bluetoothd
++++ b/etc/init.d/bluetoothd
+@@ -10,18 +10,18 @@
+ DEBUG=`cat /data/bt/debug`
+ fi
+ PROG=/usr/bin/bluetoothd
+-conf_dir=/data/bt/bluez/
++conf_dir=/data/bt/bluez
+ 
+ function bluetoothd_start() {
+     if [ $DEBUG = "1" ]; then
+-        $PROG -C -d -n 2>/tmp/bluetoothd.log &
++        $PROG -C -d -n -f "$conf_dir/bluetooth/main.conf" 2>/tmp/bluetoothd.log &
+         echo "Start	hcidump"
+         rm /tmp/hci.cfa > /dev/null 2>&1
+         hcidump -w /tmp/hci.cfa &
+         cat /proc/kmsg >/tmp/dmsg.log &
+     else
+         procd_open_instance
+-        procd_set_param command "$PROG" -n
++        procd_set_param command "$PROG" -n -f $conf_dir/bluetooth/main.conf
+         procd_set_param respawn 3600 5 0
+         procd_close_instance
+     fi
+@@ -69,7 +69,7 @@
+         rtk_hciattach -n -s 115200 ttyS1 rtk_h5 > /dev/null 2>&1 &
+     fi
+     sleep 2
+-    btmgmt power on
++    timeout 20 bluetoothctl power on &
+ }
+ 
+ start_service() {
+@@ -81,28 +81,24 @@
+     else
+         start_marvell
+     fi
+-    if [ ! -d $conf_dir/bluetooth ];then
++    if [ ! -d $conf_dir/bluetooth ] || [ ! -f $conf_dir/bluetooth/main.conf ] ; then
+         /bin/mkdir -p $conf_dir/bluetooth
+         /bin/chmod 777 $conf_dir/bluetooth
+-    else
+-        if [ -f $conf_dir/bluetooth/main.conf ];then
+-            rm -rf $conf_dir/bluetooth/main.conf
+-        fi
++        cp /etc/bluetooth/* $conf_dir/bluetooth/
++
++        SN=$(echo -n `uci -c /data/etc get binfo.binfo.sn` | tail -c -4)
++        MODEL=$(uci -c /usr/share/mico get version.version.HARDWARE)
++        
++        BT_NAME="${MODEL}-${SN}"
++
++        sed -i "s|Name = .*|Name = ${BT_NAME}|" $conf_dir/bluetooth/main.conf
+     fi
+-    cp /etc/bluetooth/* $conf_dir/bluetooth/
+ 
+     if [ ! -d $conf_dir/lib/bluetooth ];then
+         /bin/mkdir -p $conf_dir/lib/bluetooth
+         /bin/chmod 777 $conf_dir/lib/bluetooth
+     fi
+ 
+-    BT_NAME=$(micocfg_bt_name)
+-    BT_ALIAS=$(micocfg_bt_alias)
+-    if [ x"$BT_ALIAS" != x"" ];then
+-         BT_NAME=$BT_ALIAS
+-    fi
+-
+-    sed -i "s|Name = .*|Name = ${BT_NAME}|" $conf_dir/bluetooth/main.conf
+     echo "Start	bluetoothd"
+     bluetoothd_start
+ }
+--- a/etc/init.d/pns
++++ b/etc/init.d/pns
+@@ -219,6 +219,7 @@
+         fi
+     fi
+ 
++    [ -x /data/enable_pns ] || return 0
+     local vendor_name=$(micocfg_speech_vendor);
+     if [ "nuance" = $vendor_name ]; then
+         _start_mipns_nuance
+--- a/etc/init.d/dhcpc
++++ b/etc/init.d/dhcpc
+@@ -21,7 +21,7 @@
+ }
+ 
+ start_service() {
+-  h_name=$(micocfg_dhcp_hostname)
++  h_name=$(hostname)
+   
+   procd_open_instance
+   procd_set_param command udhcpc -f -S -s /bin/simple_dhcp.sh -R -t 0 -T 1 -i wlan0 -x "hostname:$h_name"
+--- a/etc/asound.conf
++++ b/etc/asound.conf
+@@ -1,4 +1,10 @@
+ pcm.!default {
++  type asym
++  playback.pcm "general"
++  capture.pcm "mico_record"
++}
++
++pcm.general {
+   type plug
+   slave {
+     pcm {
+@@ -53,24 +59,6 @@
+     format S16_LE
+     rate 48000
+   }
+-}
+-
+-pcm.dtsaudio {
+-	type plug
+-	slave.pcm "dtsladspa"
+-}
+-
+-pcm.dtsladspa {
+-	type ladspa
+-	slave.pcm plug:dmixer
+-	channels 2
+-	path "/usr/lib/"
+-	playback_plugins [{
+-	label dts_process
+-		input {
+-			controls [4]
+-		}
+-	}]
+ }
+ 
+ pcm.dmixer  {
+--- a/usr/sbin/boot_function.sh
++++ b/usr/sbin/boot_function.sh
+@@ -101,7 +101,7 @@
+ 
+ data_dir_prepare()
+ {
+-    local dir_list="/data/etc/ /data/wifi /data/bt /data/miio"
++    local dir_list="/data/etc/ /data/lib /data/wifi /data/bt /data/miio"
+     for one_dir in $dir_list
+     do
+         mico_log "create dir $one_dir " 
+@@ -208,6 +208,8 @@
+     mkdir -p /var/lock
+     mkdir -p /var/state
+     mkdir -p /var/tmp
++    [ -e /var/lib ] && rm -rf /var/lib
++    ln -s /data/lib /var/lib
+     mkdir -p /tmp/.uci
+     chmod 0700 /tmp/.uci
+     touch /var/log/wtmp
+@@ -230,14 +232,19 @@
+ time_init_buildtime()
+ {
+     timezone_init
+-    buildts=$(micocfg_build_time)
+-    [ "x$buildts" != "x" ] && date -s "$buildts"
++    # Never move an already-correct clock backwards.
++    curtime=$(date +%s)
++    buildts=$(uci -c /usr/share/mico get version.version.BUILDTS)
++    case "$buildts" in ''|*[!0-9]*) return 1 ;; esac
++    [ "$curtime" -lt "$buildts" ] && date -s "@$buildts"
++    return 0
+ }
+ 
+ hostname_set()
+ {
+-    local myname=$(micocfg_model);
+-    echo "${myname:-mico}" > /proc/sys/kernel/hostname
++    SN=$(echo -n `uci -c /data/etc get binfo.binfo.sn` | tail -c -4)
++    MODEL=$(uci -c /usr/share/mico get version.version.HARDWARE)
++    echo "${MODEL}-${SN}" > /proc/sys/kernel/hostname
+ }
+ 
+ hostname_set_sn()
+--- a/etc/init.d/done
++++ b/etc/init.d/done
+@@ -20,6 +20,11 @@
+ 
+ 	echo 0 4 0 7 > /proc/sys/kernel/printk
+ 
++ # set leds to normal state
++	/bin/show_led 13
++	sleep 2
++	/bin/shut_led 13 &
++
+ 	sleep 1
+ 	/etc/init.d/wireless boot_done
+ 
+--- a/etc/init.d/adbd
++++ b/etc/init.d/adbd
+@@ -61,10 +61,7 @@
+ }
+ 
+ start(){
+-	channel=`/sbin/uci -q get /usr/share/mico/version.version.CHANNEL`
+-	if [ "$channel" = "release" ]; then
+-		return 0
+-	fi
++	if [ ! -f "/data/adb_enable" ]; then return 0 ; fi
+ 	start_usbgadget &
+ }
+ 
+--- a/etc/pam.d/common-auth
++++ b/etc/pam.d/common-auth
+@@ -8,8 +8,8 @@
+ # traditional Unix authentication mechanisms.
+ #
+ 
+-auth sufficient libmico-pam.so
+-account sufficient libmico-pam.so
++#auth sufficient libmico-pam.so
++#account sufficient libmico-pam.so
+ # here are the per-package modules (the "Primary" block)
+ # auth	[success=1 default=ignore]	pam_unix.so nullok_secure
+ # here's the fallback if no module succeeds
+--- a/etc/pam.conf
++++ b/etc/pam.conf
+@@ -12,4 +12,4 @@
+ # Format:
+ # serv.	module	   ctrl	      module [path]	...[args..]		     #
+ # name	type	   flag							     #
+-OTHER auth required /lib/security/libmico-pam.so
++#OTHER auth required /lib/security/libmico-pam.so
+--- a/etc/init.d/boot
++++ b/etc/init.d/boot
+@@ -65,9 +65,13 @@
+ {
+ if [ x"$board_id" == x"12" ] || [ x"$board_id" == x"9" ] || [ x"$board_id" == x"8" ] || [ x"$board_id" == x"7" ] || [ x"$board_id" == x"11" ]; then
+     mkdir -p /data/mico
+-    cp /usr/share/mico/system.cfg /data/mico/
+-    micocfg_set /data/mico/system.cfg model L06A
+-    cp /usr/share/mico.l06a/*.cfg /data/mico/
++    if [ ! -f /data/mico/system.cfg ]; then
++        cp /usr/share/mico/system.cfg /data/mico/
++        micocfg_set /data/mico/system.cfg model L06A
++    fi
++    for cfg in /usr/share/mico.l06a/*.cfg; do
++        [ -f "/data/mico/${cfg##*/}" ] || cp "$cfg" /data/mico/
++    done
+     cfglist=$(cd /usr/share/mico;ls *.cfg)
+     for onecfg in $cfglist;
+     do
+@@ -186,8 +190,6 @@
+         sn_head_1=`cat $KEYPATH/read | cut -c1-10`
+         sn_head_2=`cat /etc/sn_head_list | grep $sn_head_1`
+         if [ $? == 0 ] && [ $sn_head_1 == $sn_head_2 ]; then
+-            mount --bind /etc/asound.conf.dts /etc/asound.conf
+-            logger -s "mount --bind /etc/asound.conf.dts /etc/asound.conf !!!"
+             echo 1 > /sys/devices/i2c-2/2-002c/reg_reconfig
+             logger -s "echo 1 > /sys/devices/i2c-2/2-002c/reg_reconfig !!!"
+         else
+@@ -223,6 +225,14 @@
+     mkdir -p /data/etc
+ 
+     /sbin/ifconfig lo up
++
++    # update persistent password
++    if [ ! -f /data/console/shadow ]; then
++        mkdir -p /data/console
++        cp /etc/shadow /data/console
++        cp /etc/passwd /data/console
++    fi
++    mount --bind /data/console/shadow /etc/shadow
+ 
+     # reset mrvl wifi
+     BOARD_TYPE=`fw_env -g board_id`  1>/dev/null 2>/dev/null
+--- a/etc/init.d/wireless
++++ b/etc/init.d/wireless
+@@ -53,8 +53,7 @@
+         ap_stop        stop ap mode"
+ 
+ WPA_CTRL_INTERFACE="/var/run/wpa_supplicant"
+-WIRELESS_CONF="/data/wifi/wpa.conf"
+-#WIRELESS_CONF="/data/wifi/wpa_supplicant.conf"
++WIRELESS_CONF="/data/wifi/wpa_supplicant.conf"
+ WPS_CONF="/data/wifi/wps.conf"
+ LOG_TITLE="/etc/init.d/wireless"
+ WPA_RESULT_FILE="/tmp/wpa_supplicant_auth_result"
+@@ -108,21 +107,17 @@
+ 
+ qplay()
+ {
+-    ubus call qplayer play "{\"play\":\"$1\",\"light\":3}" > /dev/null 2>&1
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ miplay()
+ {
+-    show_led 3 1>/dev/null 2>/dev/null
+-    nice -n -10 miplayer -f $1 1>/dev/null 2>/dev/null
+-    shut_led 3 1>/dev/null 2>/dev/null
++    /bin/miplay "$1"
+ }
+ 
+ miplay_bootup()
+ {
+-    show_led 17
+-    nice -n -10 miplayer -f $1 2>&1 >/dev/null
+-    shut_led 17
++    /bin/miplay "$1"
+ }
+ 
+ file_create() 
+@@ -450,7 +445,7 @@
+ 
+     local is_sta=`pgrep "wpa_supplicant$" | wc -l`
+     [ $is_sta -ne 1 ] && {
+-        sta_start >/dev/null 2>&1
++        sta_start || return 1
+         wpa_check 3
+     }
+ }
+@@ -466,8 +461,7 @@
+ #################################################################################################
+ player_pause()
+ {
+-    /usr/bin/mphelper pause 1>/dev/null 2>/dev/null
+-    /usr/bin/voip_helper -e ring_tts_stop 1>/dev/null 2>/dev/null
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ hostapd_start()
+@@ -523,11 +517,7 @@
+ 
+ app_restart_check()
+ {
+-    /etc/init.d/messagingagent restart >/dev/null 2>&1
+-    /etc/init.d/mediaplayer restart >/dev/null 2>&1
+-    /etc/init.d/alarm restart >/dev/null 2>&1
+-    /etc/init.d/pns restart >/dev/null 2>&1
+-    sleep 1
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ country_code_delete()
+@@ -702,7 +692,7 @@
+ {
+     show_led 6
+     wireless_log "miio enter ap config mode"
+-    ubus call mibt ble '{"action":"display"}' >/dev/null 2>&1
++    : # Replaced proprietary IPC.
+ 
+     if [ $(micocfg_ap_run) == "true" ] 
+     then 
+@@ -813,8 +803,35 @@
+     done
+ }
+ 
++# Preserve a paired stock config on the first open-audio boot. Never overwrite
++# an existing custom config, including an empty file or a dangling symlink.
++migrate_wireless_conf()
++{
++    [ -e "$WIRELESS_CONF" ] || [ -L "$WIRELESS_CONF" ] || {
++        local legacy="/data/wifi/wpa.conf"
++        [ -f "$legacy" ] && [ -s "$legacy" ] || {
++            wireless_log "No nonempty legacy Wi-Fi config; refusing blank configuration"
++            return 1
++        }
++        local temporary="${WIRELESS_CONF}.migrate.$$"
++        (umask 077; set -C; cat "$legacy" > "$temporary") &&
++            chmod 600 "$temporary" &&
++            ln "$temporary" "$WIRELESS_CONF" || {
++                rm -f "$temporary"
++                wireless_log "Wi-Fi config migration failed"
++                return 1
++            }
++        rm -f "$temporary"
++    }
++    [ -f "$WIRELESS_CONF" ] && [ -s "$WIRELESS_CONF" ] || {
++        wireless_log "Wi-Fi config missing or empty; refusing blank configuration"
++        return 1
++    }
++}
++
+ sta_start()
+ {    
++    migrate_wireless_conf || return 1
+     procd_kill "wireless"
+ 
+     firmware_prepare_sta
+@@ -843,10 +860,10 @@
+     procd_set_param command /usr/sbin/wpa_supplicant $wpa_cmd -Dnl80211 -i$STA_IF -c$WIRELESS_CONF -C$WPA_CTRL_INTERFACE -s -dd $extra_cmd
+     procd_set_param respawn 3600 1 0
+     procd_close_instance  
+-    #procd_open_instance
+-    #procd_set_param command /usr/sbin/wpa_cli -a/bin/wpa_action.sh
+-    #procd_set_param respawn 3600 1 0
+-    #procd_close_instance 
++    procd_open_instance
++    procd_set_param command /usr/sbin/wpa_cli -i "$STA_IF" -a/bin/wpa_action.sh
++    procd_set_param respawn 3600 1 0
++    procd_close_instance 
+     procd_close_service
+ 
+     wireless_log "wpa config file:${conf_file}"
+@@ -970,54 +987,14 @@
+ 
+ wifi()
+ {
+-    ubus -t 1 call miio connect "{\"ssid\":\"$1\",\"password\":\"$2\",\"bssid\":\"$3\",\"identity\":\"$4\"}" > /dev/null 2>&1
+-    wait_dhcp_done 20
+-    if [ $dhcp_done -eq 0 ]; then
+-        echo "authfail"
+-    else
+-        echo "success"
+-    fi
++    /bin/wifi_connect "$1" "$2"
+ }
+ 
+ #################################### BOOT DONE #####################################################
+ # -->/etc/init.d/done
+ bootup_sound_custom()
+ {
+-    wireless_log "try get custom bootup sound"
+-    local profile_result=$(matool_device_sn_profile)
+-    wireless_log "profile result $profile_result"
+-    json_init 
+-    json_load "$profile_result"
+-    json_get_var code_str code
+-    [ "$code_str" != "0" ] && {
+-        wireless_log "get result failed"
+-        return
+-    }
+-
+-    json_select data
+-    json_get_var audio_url power_up_audio
+-    json_get_var audio_suffix power_up_audio_type
+-    json_cleanup
+-
+-    [ "$audio_url" == "" -o "$audio_suffix" == "" ] && {
+-        wireless_log "empty url \"$audio_url\" or \"$audio_suffix\" " 
+-        return
+-    }
+-
+-    wireless_log "power_up_audio url ${audio_url}, "
+-    mkdir -p /data/custom_sound/
+-    audio_file=/data/custom_sound/power_up.$audio_suffix
+-    rm $audio_file
+-    wget ${audio_url} -O $audio_file
+-    [ ! -f $audio_file ] && {
+-        wireless_log "audio file download fail"
+-        return
+-    }
+-    fsync $audio_file > /dev/null 2>&1
+-    echo $audio_file >/data/custom_sound/bootup.conf
+-    fsync /data/custom_sound/bootup.conf > /dev/null 2>&1
+-    wireless_log "try get custom bootup sound success"
+-    return
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ battery_capacity_broadcast()
+@@ -1048,7 +1025,7 @@
+             }
+         fi
+     fi
+-    ubus -t 1 call mediaplayer player_play_url '{"url":"/usr/share/sound/battery_'${cap_flag}'.opus","type":1}'
++    : # Replaced proprietary IPC.
+ }
+ 
+ boot_done_led()
+@@ -1057,7 +1034,7 @@
+         show_led 26
+         {
+             sleep 3
+-            ubus call mibt connect '{"recent": "1"}'
++            : # Replaced proprietary IPC.
+         } > /dev/null 2>&1 &
+     else
+         show_led 27
+@@ -1090,12 +1067,12 @@
+     wireless_log "boot done volume $VOL_VALUE"
+     amixer sset mysoftvol $VOL_VALUE
+     if [ ! -f "/data/status/config_done" ]; then
+-        ubus -t 10 wait_for mediaplayer
+-        /etc/init.d/pns stop
++        : # Replaced proprietary IPC.
++        : # Replaced proprietary service.
+         [ "$MODEL" == "L16A" -o "$MODEL" == "L17A" -o "$MODEL" == "L16B" ] && miplay_bootup /usr/share/common_sound/bootup.opus
+         miplay /usr/share/common_sound/welcome.opus
+         [ "$MODEL" == "M03A" ] && boot_done_led
+-        /etc/init.d/pns start   
++        : # Replaced proprietary service.
+     else
+         [ -x /bin/silentboot.sh ] && si_flag=`/bin/silentboot.sh get`
+         if [ "$si_flag" = "1" ]; then
+@@ -1106,10 +1083,10 @@
+                 miplay $custom_bootup_opus &
+             } || { 
+                 if [ "$MODEL" == "L16A" -o "$MODEL" == "L17A" -o "$MODEL" == "L16B" ]; then
+-                    ubus -t 10 wait_for mediaplayer
+-                    /etc/init.d/pns stop
++                    : # Replaced proprietary IPC.
++                    : # Replaced proprietary service.
+                     miplay_bootup /usr/share/common_sound/bootup.opus
+-                    /etc/init.d/pns start
++                    : # Replaced proprietary service.
+                 elif [ "$MODEL" == "M03A" ]; then
+                     wtd_flag=$(cat /sys/kernel/debug/remoteproc/remoteproc1/wtd)
+                     if [ $wtd_flag -eq 1 ]; then
+@@ -1130,24 +1107,12 @@
+ 
+ mico_ble_start()
+ {
+-    ubus call pnshelper event_notify '{"src":5,"event":2,"detail":"on"}'
+-
+-    sleep 1
+-
+-    if [ -f /etc/init.d/bluetooth_ble ]; then
+-        /etc/init.d/bluetooth_ble restart
+-    else
+-        /etc/init.d/bluetooth restart
+-    fi
+-
+-    # ubus call mibt notify_state '{"src":"miio","event":"register","detail":"start"}'
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ mico_ble_stop()
+ {
+-    ubus call mibt notify_state '{"src":"miio","event":"register","detail":"finish"}'
+-
+-    ubus call pnshelper event_notify '{"src":5,"event":2,"detail":"off"}'
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ #################################### POST MIIO ISSUE ##############################################
+@@ -1180,13 +1145,13 @@
+     file_delete /data/status/mico_try_register_times
+     file_delete /data/status/use_predef_dns
+ 
+-    ubus -t 1 call miio config_mode >/dev/null 2>&1
++    : # Replaced proprietary IPC.
+ 
+     file2log $WIRELESS_CONF
+ 
+-    /etc/init.d/miplay stop >/dev/null 2>&1
++    : # Replaced proprietary service.
+     mico_ble_start > /dev/null 2>&1
+-    /etc/init.d/voip restart > /dev/null 2>&1
++    : # Replaced proprietary service.
+ 
+     channel=$(micocfg_channel)
+     [ $WIFI_CHIP == "8821cs" ] && {
+@@ -1198,27 +1163,12 @@
+ 
+ andlink_enable()
+ {
+-    custom_type=$(micocfg_custom)
+-    wireless_log "test andlink enable, type $custom_type"
+-    [ x"$custom_type" == x"CMCC" ]  && {
+-        wireless_log "try andlink enabled"
+-        /etc/init.d/cmcc_andlink enable >/dev/null 2>&1
+-    }
++    : # Proprietary service replaced by open audio.
+ }
+ 
+ is_bt_classical_discoverable()
+ {
+-    mibt_status_json=`ubus call mibt status`
+-    json_init 1>/dev/null 2>/dev/null
+-    json_load "$mibt_status_json"  1>/dev/null 2>/dev/null
+-    json_get_var data_info "info" 1>/dev/null 2>/dev/null
+-    json_cleanup
+-
+-    json_init 1>/dev/null 2>/dev/null
+-    json_load "$data_info"  1>/dev/null 2>/dev/null
+-    json_get_var discover_info "discover" 1>/dev/null 2>/dev/null
+-    json_cleanup
+-    return $discover_info
++    return 0 # Proprietary mibt service is disabled.
+ }
+ 
+ #################################### POST MIIO ISSUE ##############################################
+@@ -1329,28 +1279,28 @@
+     file_create /data/status/config_done
+     file_delete /tmp/in_config_mode_flag
+ 
+-    ubus call mibt enable '{"btmode":"ble", "action":"close"}'
++    : # Replaced proprietary IPC.
+     is_bt_classical_discoverable
+     [ $? -eq 1 ] && {
+-        ubus call mibt enable '{"btmode":"classic", "action":"close"}'
++        : # Replaced proprietary IPC.
+     }
+     sync
+ 
+     /etc/init.d/dnsmasq restart
+-    /etc/init.d/voip restart
+-    /etc/init.d/mico_aivs_lab restart >/dev/null 2>&1
+-    /etc/init.d/pns restart >/dev/null 2>&1
+-    /etc/init.d/idmruntime restart >/dev/null 2>&1
++    : # Replaced proprietary service.
++    : # Replaced proprietary service.
++    : # Replaced proprietary service.
++    : # Replaced proprietary service.
+     if [ -f /etc/init.d/miplay ]; then
+         {
+             sleep 2
+-            /etc/init.d/miplay restart 1>/dev/null 2>&1
++            : # Replaced proprietary service.
+         } >/dev/null 2>&1 &
+     fi
+     ( bootup_sound_custom >/dev/null 2>&1 ) &
+ 
+     andlink_enable >/dev/null 2>&1
+-    /etc/init.d/cmcc_ims restart  >/dev/null 2>&1
++    : # Replaced proprietary service.
+ 
+     mico_ble_stop > /dev/null 2>&1
+     wireless_log "ble discover set 0 success."
+@@ -1361,69 +1311,7 @@
+ #################################### OTA ##########################################################
+ ota()
+ {
+-    ota_url=$1
+-    ssid=$2
+-    password=$3
+-    identity=$4
+-
+-    trylock "ota"
+-    [ $? != 0 ] && {
+-        # shut_led 10
+-        # show_led 6
+-        wireless_log "already proessing a regiser issue, stop miio"
+-        echo "registing"
+-        exit 1;
+-    }
+-
+-    config_start_sound
+-    show_led 10
+-
+-    #remove for cmcc-ims
+-    #connect_times_update 
+-    player_pause
+-
+-    [ x$(micocfg_ap_run) == x"true" -a x"$WIRELESS_MODE" == x"AP" ] && {
+-        sta_start > /dev/null 2>&1
+-        wpa_check 30
+-    }
+-
+-    [ x"$MIOT_AUTO_PROVISION_SUPPORT" == x"yes" ] && {
+-        wpa_reconfigure
+-    }
+-
+-    connect_result=$(wifi "$ssid" "$password" "$identity");
+-    [ "$connect_result" != "success" ] && {
+-        wireless_log "wifi connnect fail ret $connect_result"
+-        shut_led 10
+-        show_led 6
+-        echo "$connect_result"
+-        exit 2;
+-    }
+-    
+-    [ "${ota_url:0:8}" == "https://" ] && {
+-        curl -k $ota_url --output /tmp/mico_all.bin
+-    } || {
+-        curl $ota_url --output /tmp/mico_all.bin
+-    }
+-    [ $? != 0 ] && {
+-        wireless_log "download fail."
+-        shut_led 10
+-        show_led 6
+-        echo "download_fail"
+-        exit 3;
+-    }
+-
+-    flash.sh /tmp/mico_all.bin
+-    [ $? != 0 ] && {
+-        wireless_log "flash.sh fail."
+-        shut_led 10
+-        show_led 6
+-        echo "flash_fail."
+-        exit 4;
+-    }
+-
+-    #success flash.sh will restart device,don't need any process.
+-    exit 0;
++    return 1 # Offline rootfs build provides no stock OTA action.
+ }
+ 
+ #################################################################################################
+@@ -1448,14 +1336,13 @@
+     #wireless_stop >/dev/null 2>&1
+     #for ccmp error
+     [ ! -f /data/status/config_done ] && {
+-        wireless_log "not config done, force remove $WIRELESS_CONF"
+-        file_delete $WIRELESS_CONF
++        # Keep migrated/custom credentials even without the stock pairing marker.
+         show_led 6
+ 
+         wireless_log "wireless mode: $WIRELESS_MODE wifi scan: $MIIO_WIFI_SCAN"
+ 
+         # start sta for get wifi scan list, ap will start in miio_helper after scan done.
+-        sta_start >/dev/null 2>&1
++        sta_start || return 1
+ 
+         [ x"$WIRELESS_MODE" == x"AP-STA" ] && {
+             ap_start >/dev/null 2>&1
+@@ -1464,7 +1351,7 @@
+         return 0
+     }
+ 
+-    sta_start  >/dev/null 2>&1
++    sta_start || return 1
+     return 0
+ }
+ 
+--- a/etc/asound.conf.dts
++++ b/etc/asound.conf.dts
+@@ -1,9 +1,15 @@
+ pcm.!default {
++  type asym
++  playback.pcm "general"
++  capture.pcm "mico_record"
++}
++
++pcm.general {
+   type plug
+   slave {
+     pcm {
+       type softvol
+-      slave.pcm dtsaudio
++      slave.pcm dmixer
+       control{
+         name "mysoftvol"
+         card 0
+@@ -53,24 +59,6 @@
+     format S16_LE
+     rate 48000
+   }
+-}
+-
+-pcm.dtsaudio {
+-	type plug
+-	slave.pcm "dtsladspa"
+-}
+-
+-pcm.dtsladspa {
+-	type ladspa
+-	slave.pcm plug:dmixer
+-	channels 2
+-	path "/usr/lib/"
+-	playback_plugins [{
+-	label dts_process
+-		input {
+-			controls [4]
+-		}
+-	}]
+ }
+ 
+ pcm.dmixer  {
+--- a/bin/wpa_action.sh
++++ b/bin/wpa_action.sh
+@@ -8,48 +8,12 @@
+ 
+-miio_wireless_disconnected_event() {
+-    [ `micocfg_miot_auto_provision_support` != "yes" ] && {
+-        mico_log "no need send wireless_disconnected_event event"
+-        return;
+-    }
+-
+-    #[ ! -f "/data/status/config_done" ] && {
+-    #    logger -t network_probe.sh -p 3 "need send wireless_disconnected_event event, not config done"
+-    #    return
+-    #}
+-
+-    ssid=`cat /tmp/wifi_connected_info.ssid 2>/dev/null`
+-    bssid=`cat /tmp/wifi_connected_info.bssid 2>/dev/null`
+-    mico_log "ubus call miio wifi_disconnected  {\"from\":\"$LOG_TITLE\",\"ssid\":\""$ssid"\",\"bssid\":\"$bssid\"}"
+-    #ubus call miio wifi_disconnected  {\"from\":\"$LOG_TITLE\",\"ssid\":\""$ssid"\",\"bssid\":\"$bssid\"} &
+-    micocfg_miio_wifi_disconnected  "$LOG_TITLE" "$ssid" "$bssid"  &
+-
+-    /bin/ipt_network.sh miot_network_unblock
++miio_wireless_disconnected_event()
++{
++    : # Cloud provisioning is replaced; DHCP remains below.
+ }
+ 
+-miio_wireless_connected_event() {
+-    [ `micocfg_miot_auto_provision_support` != "yes" ] && {
+-        mico_log "no need send wireless_connected_event event"
+-        return;
+-    }
+-
+-    #[ ! -f "/data/status/config_done" ] && {
+-    #    logger -t network_probe.sh -p 3 "need send wireless_connected_event event, not config done"
+-    #    return
+-    #}
+-
+-    ssid=`micocfg_ssid`
+-    bssid=`micocfg_bssid`
+-
+-    echo -n "$ssid" > /tmp/wifi_connected_info.ssid
+-    echo -n "$bssid" > /tmp/wifi_connected_info.bssid
+-
+-    if [ x"$ssid" == x"$MIOT_HIDDEN_SSID" ]; then
+-        /bin/ipt_network.sh miot_network_block
+-    else
+-        /bin/ipt_network.sh miot_network_unblock
+-    fi
+-
+-    mico_log "save wifi info > /tmp/wifi_connected_info " \""$ssid"\" $bssid
++miio_wireless_connected_event()
++{
++    : # Cloud provisioning is replaced; DHCP remains below.
+ }
+ 
+ 
+@@ -62,6 +26,7 @@
+     # configure network, signal DHCP client, etc.
+     /etc/init.d/dhcpc start
+     /etc/init.d/odhcp6c start
++    (sleep 10; ntpd -q -p pool.ntp.org) &
+     miio_wireless_connected_event
+ fi
+ 
+@@ -71,6 +36,6 @@
+     mico_log "wpa event DISCONNECTED"
+     /etc/init.d/dhcpc stop
+     /etc/init.d/odhcp6c stop
+-    /etc/init.d/miplay stop
++    : # Proprietary player replaced.
+     miio_wireless_disconnected_event
+ fi

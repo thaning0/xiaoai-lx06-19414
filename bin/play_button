@@ -1,0 +1,135 @@
+#!/bin/sh
+
+STATFILE=/tmp/play_button
+CLICK_DELAY="0.3"
+CLICK_COUNT=1
+HOLD_COUNT=0
+
+command_exists(){ command -v $1 >/dev/null; }
+
+# button is pressed multiple times
+if [ -f "$STATFILE" ]; then
+  echo $CLICK_COUNT >> $STATFILE
+  exit
+fi
+
+MODEL=$(uci -c /usr/share/mico get version.version.HARDWARE)
+
+# count how many button clicks are done.
+echo $CLICK_COUNT > $STATFILE
+while true; do
+  sleep $CLICK_DELAY
+  CLICK_TOTAL=$(wc -l $STATFILE | awk '{print $1}')
+  if [ "$CLICK_COUNT" -eq "$CLICK_TOTAL" ] || [ "$CLICK_TOTAL" -ge 8 ]; then
+    unset CLICK_TOTAL
+    rm -f $STATFILE
+    break
+  fi
+  CLICK_COUNT=$CLICK_TOTAL
+done
+
+is_button_pressed() {
+  local device="event0"
+  local key="0072"
+  [ "$MODEL" = "LX01" ] && device="event1"
+  getevent -p /dev/input/$device 2>/dev/null | grep -q ' '"$key"'\*' && return 0
+  return 1
+}
+
+toggle_play_songs() {
+# if bluetooth playing, only play/pause there.
+# otherwise apply to MPC
+
+  if command_exists bluetoothctl; then
+    BT_STATUS=$(timeout 1 bluetoothctl player.show | grep -i status | awk '{print $2}')
+
+    if [ -n "$BT_STATUS" ]; then
+      [ "$BT_STATUS" = "playing" ] && bluetoothctl player.pause
+      [ "$BT_STATUS" = "paused" ] && bluetoothctl player.play
+      exit
+    fi
+  fi
+
+  if command_exists mpc; then
+    if mpc status | grep -qE '^\[playing\]|\[paused\]' ; then
+      mpc toggle
+      exit
+    fi
+  fi
+
+  if command_exists dbus-send && command_exists shairport-sync; then
+    dbus-send --system --type=method_call --dest=org.gnome.ShairportSync '/org/gnome/ShairportSync' org.gnome.ShairportSync.RemoteControl.PlayPause
+  fi
+}
+
+say() { speak -v en "$1"; }
+
+while is_button_pressed; do
+  sleep 0.1
+  HOLD_COUNT=$((HOLD_COUNT + 1))
+  #echo "$HOLD_COUNT $(date)" >> /tmp/count_hold
+
+  if [ "$HOLD_COUNT" = "85" ] ; then
+    /bin/show_led 5
+    # switch partitions
+    if [ "$MODEL" = "LX01" ]; then
+      if [ `read_misc ota_reboot` = "1" ]; then
+        echo "Disabling OTA reboot"
+        write_misc -o 0
+      else
+        bootpart=`read_misc boot_rootfs`
+        [ "$bootpart" = "0" ] && bootpart="1" || bootpart="0"
+        echo "Switching last success partition to $bootpart"
+        write_misc -l $bootpart
+      fi
+    else
+      bootpart="boot0"
+      [ "`fw_env -g boot_part`" = "boot0" ] && bootpart="boot1"
+      echo "Switching to $bootpart"
+      fw_env -s boot_part $bootpart
+    fi
+    miplay sound shutdown -w
+    reboot
+  elif [ "$HOLD_COUNT" = "50" ] ; then
+    /bin/show_led 4
+  fi
+done
+
+[ "$HOLD_COUNT" -ge 50 ] && /bin/shut_led 4
+
+[ "$HOLD_COUNT" -ge 15 ] && [ "$HOLD_COUNT" -le 50 ] && {
+  if command_exists bluetoothctl; then
+    BT_STATUS=$(timeout 1 bluetoothctl player.show | grep -i status | awk '{print $2}')
+
+    if [ -n "$BT_STATUS" ]; then
+      timeout 8 bluetoothctl disconnect &
+      miplay sound shutdown
+      exit
+    fi
+  fi
+}
+
+[ "$HOLD_COUNT" -ge 10 ] && exit # HACK to stop click normal
+
+[ "$CLICK_COUNT" = "1" ] && toggle_play_songs
+[ "$CLICK_COUNT" = "2" ] && {
+    PIDP=$(pgrep -x "/usr/bin/porcupine")
+    if [ -n "$PIDP" ] ; then
+      kill -SIGINT $PIDP
+    fi
+}
+[ "$CLICK_COUNT" = "3" ] && {
+    if ! bluetoothctl list | grep -q .; then
+      say "bluetooth not available"
+      exit
+    fi
+    (say "bluetooth pairing") &
+    /bin/bluetooth_pair
+}
+[ "$CLICK_COUNT" = "5" ] && [ -e "/usr/bin/improv-wifi" ] && {
+    pgrep "improv-wifi" && (say "the speaker is already in wifi pairing mode") && exit
+
+    /usr/bin/improv-wifi --timeout 3m -w /bin/wifi_connect &
+    sleep 0.5
+    pgrep "improv-wifi" && (say "wifi pairing, to connect the speaker, use a system compatible with, improv wifi") || miplay sound notice
+}

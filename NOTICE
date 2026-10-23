@@ -1,0 +1,14 @@
+本项目派生自 duhow/xiaoai-patch，感谢其作者及贡献者。
+仓库主许可证为 GNU General Public License version 3，原文见 LICENSE。
+本地修改与来源快照见 UPSTREAM.md；各文件原有版权/许可证说明保留。
+
+保留的 tools/mico_firmware.py 来源于 csftech/Xiaomi-OpenWrt-firmware-toolkit，
+MIT 许可全文见 LICENSES/MIT-csftech.txt；tools/unpack_bootimg.py 保留
+Android/AOSP 的 Apache-2.0 说明，许可全文见 LICENSES/Apache-2.0.txt；
+bin/lsb_release 与 packages 内的脚本/补丁保留各自原有声明。
+第三方包的 package.mk 是构建配方，不把其下载的软件统一重新许可。
+
+Xiaomi 厂商固件、kernel/firmware/calibration、设备备份与上游 release
+编译二进制不包含在本仓库。本项目不对厂商固件声称 GPL 授权，
+也不因链接输入或复用组件而授予再分发权。自行构建的镜像可能含私人配置，
+不得未经清理与权利审查直接上传 Git 或 Release。

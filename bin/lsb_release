@@ -1,0 +1,354 @@
+#!/bin/sh
+#
+# lsb_release - collect LSB conformance status about a system
+#
+# Copyright (C) 2000, 2002, 2004 Free Standards Group, Inc.
+# Originally by Dominique MASSONIE <mdomi@users.sourceforge.net>
+# Modified for SUSE Linux products by Thorsten Kukuk
+# Modified for Red Hat distributions by Neal Gompa
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Description:
+# Collect information from sourceable /etc/lsb-release file (present on
+# LSB-compliant systems) : LSB_VERSION, DISTRIB_ID, DISTRIB_RELEASE,
+# DISTRIB_CODENAME, DISTRIB_DESCRIPTION (all optional)
+# Then (if needed) find and add names from /etc/lsb-release.d
+
+
+###############################################################################
+#     DECLARATIONS
+###############################################################################
+
+# This script version
+SCRIPTVERSION="3.3"
+
+# Defines the data files
+INFO_LSB_FILE="/etc/lsb-release"              # where to get LSB version
+INFO_LSB_DIR="/etc/lsb-release.d"             # where to get LSB addon modules
+INFO_DISTRIB_FILE="/etc/os-release"           # <distrib>-<suffix>
+
+# Defines our exit codes
+EXIT_STATUS="0"                           # default = Ok :)
+ERROR_UNKNOWN="10"                        # unknown error
+ERROR_USER="1"                            # program misuse
+ERROR_PROGRAM="2"                         # internal error
+ERROR_NOANSWER="3"                        # all required info not available
+                                          # typically non LSB compliant distro!
+
+# Defines our messages
+MSG_LSBVER="LSB Version:\t"
+MSG_DISTID="Distributor ID:\t"
+MSG_DISTDESC="Description:\t"
+MSG_DISTREL="Release:\t"
+MSG_DISTCODE="Codename:\t"
+MSG_NA="n/a"
+MSG_NONE="(none)"
+MSG_RESULT="" # contains the result in case short output selected
+MSG_DISTRIBUTOR=""
+
+###############################################################################
+#     FUNCTIONS
+###############################################################################
+
+# Display Program Version for internal use (needed by help2man)
+DisplayProgramVersion() {
+    echo "$(basename "$0") v$SCRIPTVERSION"
+    echo
+    echo "Copyright (C) 2000, 2002, 2004 Free Standards Group, Inc."
+    echo "Copyright (C) 2017 SUSE Linux GmbH"
+    echo "Copyright (C) 2022 SUSE Software Solutions Germany GmbH"
+    echo "Copyright (C) 2021, 2023 Neal Gompa"
+    echo
+    echo "This is free software; see the source for copying conditions.  There is NO"
+    echo "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    echo
+    echo "Originally written by Dominique MASSONIE."
+
+    exit $EXIT_STATUS
+}
+
+# defines the Usage for lsb_release
+Usage() {
+    echo "$(basename "$0") v$SCRIPTVERSION prints certain LSB (Linux Standard Base) and"
+    echo "Distribution information."
+    echo
+    echo "Usage: $(basename "$0") [OPTION]..."
+    echo "With no OPTION specified defaults to -v."
+    echo
+    echo "Options:"
+    echo "  -v, --version"
+    echo "    Display the version of the LSB specification against which the distribution is compliant."
+    echo "  -i, --id"
+    echo "    Display the string id of the distributor."
+    echo "  -d, --description"
+    echo "    Display the single line text description of the distribution."
+    echo "  -r, --release"
+    echo "    Display the release number of the distribution."
+    echo "  -c, --codename"
+    echo "    Display the codename according to the distribution release."
+    echo "  -a, --all"
+    echo "    Display all of the above information."
+    echo "  -s, --short"
+    echo "    Use short output format for information requested by other options (or version if none)."
+    echo "  -h, --help"
+    echo "    Display this message."
+
+    exit $EXIT_STATUS
+}
+
+# Handles the enhanced args (i.e. --something)
+EnhancedGetopt() {
+    getopt -T >/dev/null 2>&1             # is getopt the enhanced one ?
+    if [ $? = 4 ]
+    then                                  # Yes, advanced args ALLOWED
+        OPT=$(getopt -o acdhirsvp                                             \
+--long all,codename,description,help,id,release,short,version,program_version \
+              -n 'lsb_release'                                                \
+              -- "$@")
+    else                                  # No, advanced args NOT allowed
+        # convert (if needed) the enhanced options into basic ones
+        MYARGS=$(echo "$@" | sed -e "/--/s/-\(-[[:alnum:]]\)[[:alnum:]]*/\1/g")
+        OPT=$(getopt -o acdhirsvp                                             \
+                     -n 'lsb_release'                                         \
+                     -- "$MYARGS")
+    fi
+    if [ $? != 0 ]
+    then
+        exit $ERROR_PROGRAM
+    fi
+
+    NB_ARG=""       # enabled if many args set in one parameter (i.e. -dris)
+    eval set -- "$OPT"
+    while true ; do
+        case "$1" in
+        -a|--all) ARG_A="y"; NB_ARG="y"; shift;;
+        -c|--codename) ARG_C="y"; NB_ARG="y"; shift;;
+        -d|--description) ARG_D="y"; NB_ARG="y"; shift;;
+        -i|--id) ARG_I="y"; NB_ARG="y"; shift;;
+        -r|--release) ARG_R="y"; NB_ARG="y"; shift;;
+        -s|--short) ARG_S="y"; shift;;
+        -v|--version) ARG_V="y"; NB_ARG="y"; shift;;
+        -p|--program_version) DisplayProgramVersion;;
+	-h|--help) Usage;;
+        --) shift; break;;
+        *)  EXIT_STATUS=$ERROR_USER
+            Usage;;
+        esac
+    done
+}
+
+# Get/Init LSB infos (maybe Distrib infos too)
+GetLSBInfo() {
+    LSB_VERSION=""
+    if [ -f "$INFO_LSB_FILE" ]
+    then
+        # should init at least LSB_VERSION
+        . "$INFO_LSB_FILE"
+    fi
+    # Always look in the directories
+    if [ -d "$INFO_ROOT/$INFO_LSB_DIR" ]
+    then
+	for tag in "$INFO_ROOT/$INFO_LSB_DIR/"*
+	do
+	    if [ -z "$LSB_VERSION" ]
+	    then
+	        LSB_VERSION=$(basename "$tag")
+	    else
+		LSB_VERSION=$LSB_VERSION:$(basename "$tag")
+	    fi
+	done
+    fi
+    if [ -z "$LSB_VERSION" ]
+    then
+	LSB_VERSION=$MSG_NA
+    fi
+}
+
+# Get the whole distrib information string (from /etc/os-release)
+InitDistribInfo() {
+
+    . $INFO_DISTRIB_FILE
+    NO=""                    # is Description string syntax correct ?
+
+    if [ -z "$DISTRIB_DESCRIPTION" ]; then
+	if [ -n "$PRETTY_NAME" ]; then
+            DISTRIB_DESCRIPTION=$PRETTY_NAME
+	else
+            DISTRIB_DESCRIPTION=$MSG_NONE
+	fi
+    fi
+
+    if [ -z "$DISTRIB_ID" ]; then
+	if [ -n "$MSG_DISTRIBUTOR" ]; then
+	    DISTRIB_ID=$MSG_DISTRIBUTOR
+	else
+	    case "$NAME" in
+		Fedora*)
+		    DISTRIB_ID="Fedora"
+		    ;;
+		CentOS*)
+		    DISTRIB_ID="CentOS"
+		    ;;
+		"Red Hat Enterprise Linux"*)
+		    DISTRIB_ID="RedHatEnterprise"
+		    ;;
+		AlmaLinux*)
+		    DISTRIB_ID="AlmaLinux"
+		    ;;
+		Oracle*)
+		    DISTRIB_ID="OracleLinux"
+		    ;;
+		openSUSE*)
+		    DISTRIB_ID="openSUSE"
+		    ;;
+		SLE*|ALP*|SUSE*)
+		    DISTRIB_ID="SUSE"
+		    ;;
+		*)
+		    DISTRIB_ID=$(echo $NAME | tr -d '[:blank:]')
+		    ;;
+	    esac
+	fi
+    fi
+
+    if [ -z "$DISTRIB_RELEASE" ]; then
+	if [ -n "$VERSION_ID" ]; then
+            DISTRIB_RELEASE=$VERSION_ID
+	else
+            DISTRIB_RELEASE=$MSG_NA
+	fi
+    fi
+
+    if [ -z "$DISTRIB_CODENAME" ]; then
+	if [ -n "$VERSION_CODENAME" ]; then
+            DISTRIB_CODENAME=$VERSION_CODENAME
+	else
+            DISTRIB_CODENAME=$MSG_NA
+	fi
+    fi
+}
+
+# Check missing and requested infos, then find the file and get infos
+GetDistribInfo() {
+    NO=""  # /etc/lsb-release data are enough to reply what is requested?
+    [ -n "$ARG_D" ] && [ -z "$DISTRIB_DESCRIPTION" ] && NO="y"
+    [ -z "$NO" ] && [ -n "$ARG_I" ] && [ -z "$DISTRIB_ID" ] && NO="y"
+    [ -z "$NO" ] && [ -n "$ARG_R" ] && [ -z "$DISTRIB_RELEASE" ] && NO="y"
+    [ -z "$NO" ] && [ -n "$ARG_C" ] && [ -z "$DISTRIB_CODENAME" ] && NO="y"
+
+    if [ -n "$NO" ]
+    then
+        InitDistribInfo
+    fi
+}
+
+# Display version of LSB against which distribution is compliant
+DisplayVersion() {
+    if [ -z "$ARG_S" ]
+    then
+        printf "$MSG_LSBVER$LSB_VERSION\n"          # at least "n/a"
+    else
+        MSG_RESULT="$MSG_RESULT${MSG_RESULT:+ }$LSB_VERSION"
+    fi
+}
+
+# Display string id of distributor ( i.e. a single word! )
+DisplayID() {
+    if [ -z "$ARG_S" ]
+    then
+        printf "$MSG_DISTID$DISTRIB_ID\n"
+    else
+        MSG_RESULT="$MSG_RESULT${MSG_RESULT:+ }$DISTRIB_ID"
+    fi
+}
+
+# Diplay single line text description of distribution
+DisplayDescription() {
+    if [ -z "$DISTRIB_DESCRIPTION" ]
+    then
+        # should not be empty since GetDistribInfo called on Initialization !
+        EXIT_STATUS=$ERROR_PROGRAM
+    fi
+    if [ -z "$ARG_S" ]
+    then
+        printf "$MSG_DISTDESC$DISTRIB_DESCRIPTION\n"
+    else
+        MSG_RESULT="$MSG_RESULT${MSG_RESULT:+ }\"$DISTRIB_DESCRIPTION\""
+    fi
+}
+
+# Display release number of distribution.
+DisplayRelease() {
+    if [ -z "$ARG_S" ]
+    then
+        printf "$MSG_DISTREL$DISTRIB_RELEASE\n"
+    else
+        MSG_RESULT="$MSG_RESULT${MSG_RESULT:+ }$DISTRIB_RELEASE"
+    fi
+}
+
+# Display codename according to distribution version.
+DisplayCodename() {
+    if [ -z "$ARG_S" ]
+    then
+        printf "$MSG_DISTCODE$(echo "$DISTRIB_CODENAME" |                    \
+                               tr -d "[:blank:]")\n" # Remove blanks
+    else
+        MSG_RESULT="$MSG_RESULT${MSG_RESULT:+ }$(echo "$DISTRIB_CODENAME" |   \
+                                                 tr -d "[:blank:]")"
+    fi
+}
+
+
+###############################################################################
+#     MAIN
+###############################################################################
+
+# Check if any prog argument
+if [ -z "$1" ]
+then
+    ARG_V="y"           # default set to Display LSB Version (not Usage)
+else
+    EnhancedGetopt "$@" # Parse program args
+    if [ -n "$ARG_S" ] && [ -z "$NB_ARG" ]
+    then
+        ARG_V="y"       # set also default for --short when single arg
+    fi
+fi
+
+# Update args to All if requested
+if [ -n "$ARG_A" ]
+then
+    [ -z "$ARG_C" ] && ARG_C="y"
+    [ -z "$ARG_D" ] && ARG_D="y"
+    [ -z "$ARG_I" ] && ARG_I="y"
+    [ -z "$ARG_R" ] && ARG_R="y"
+    [ -z "$ARG_V" ] && ARG_V="y"
+fi
+
+# Initialization
+GetLSBInfo
+GetDistribInfo
+
+# Display requested infos (order as follow)
+[ -n "$ARG_V" ] && DisplayVersion
+[ -n "$ARG_I" ] && DisplayID
+[ -n "$ARG_D" ] && DisplayDescription
+[ -n "$ARG_R" ] && DisplayRelease
+[ -n "$ARG_C" ] && DisplayCodename
+
+[ -n "$ARG_S" ] && echo "$MSG_RESULT"
+
+exit $EXIT_STATUS

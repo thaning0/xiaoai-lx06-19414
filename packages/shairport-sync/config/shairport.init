@@ -1,0 +1,50 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006-2020 OpenWrt.org
+
+START=98
+USE_PROCD=1
+
+EXTRA_COMMANDS="start_pipe"
+PROG=shairport-sync
+CONF=/data/${PROG}.conf
+NQPTP=/usr/bin/nqptp
+ADDITIONAL_ARGS=""
+
+start_service() {
+    if [ ! -f "${CONF}" ]; then
+      # copy file and remove comments
+      grep -ve '^//' /etc/${PROG}.conf > ${CONF}
+
+      # set static identifier from MAC
+      # for older firmware without mico (LX01), get MAC directly from interface
+      MAC_ADDRESS=$(micocfg_mac 2>/dev/null)
+      [ -z "${MAC_ADDRESS}" ] && MAC_ADDRESS=$(cat /sys/class/net/wlan0/address)
+      MAC_ADDRESS=$(echo ${MAC_ADDRESS} | tr -d ':' | tr 'a-f' 'A-F')
+      sed -i "s/%MAC%/${MAC_ADDRESS}/g" ${CONF}
+
+      # set volume control name based on hostname (model). TODO improve
+      MODEL=$(uci -c /usr/share/mico get version.version.HARDWARE)
+      VOL_NAME="mysoftvol"
+      if [ "${MODEL}" = "LX01" ]; then
+        VOL_NAME="headphone volume"
+      fi
+      sed -i "s/%VOL%/${VOL_NAME}/g" ${CONF}
+    fi
+
+    if [ -e "$NQPTP" ]; then
+      procd_open_instance nqptp
+      procd_set_param command $NQPTP
+      procd_set_param respawn 3600 5 5
+      procd_close_instance
+    fi
+
+    procd_open_instance shairport
+    procd_set_param command /usr/bin/${PROG} -c "${CONF}" ${ADDITIONAL_ARGS}
+    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
+    procd_close_instance
+}
+
+start_pipe() {
+  ADDITIONAL_ARGS="-o pipe"
+  start
+}
