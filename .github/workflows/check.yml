@@ -4,7 +4,8 @@ permissions:
   contents: read
 jobs:
   unittest-and-syntax:
-    runs-on: ubuntu-24.04
+    # Keep user/network namespaces available for the real bubblewrap test.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
