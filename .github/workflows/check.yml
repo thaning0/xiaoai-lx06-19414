@@ -4,15 +4,28 @@ permissions:
   contents: read
 jobs:
   unittest-and-syntax:
-    # Keep user/network namespaces available for the real bubblewrap test.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Host tools only
-        run: sudo apt-get update && sudo apt-get install -y squashfs-tools fakeroot bubblewrap patch rsync binutils
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools fakeroot bubblewrap patch rsync binutils apparmor
+      - name: Allow bubblewrap user namespaces on this disposable runner
+        # Ubuntu 24.04 requires an application profile for unprivileged userns.
+        # https://documentation.ubuntu.com/release-notes/24.04/
+        # Keep global AppArmor restrictions and the builder's isolation enabled.
+        run: |
+          sudo tee /etc/apparmor.d/bwrap >/dev/null <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
+          bwrap --unshare-all --ro-bind / / -- /usr/bin/true
       - name: Unit tests (no firmware, network or device required)
         run: python3 -m unittest discover -s tests -v
       - name: Compile Python and check shell syntax without execution

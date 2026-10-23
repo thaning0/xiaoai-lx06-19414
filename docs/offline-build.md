@@ -6,7 +6,7 @@
 
 ## 1. 准备环境
 
-需要 Python 3.11+ 和支持非特权 user namespace 的 Linux。Debian / Ubuntu 可安装以下依赖：
+需要系统 `/usr/bin/python3` 为 3.11+，以及支持非特权 user namespace 的 Linux。构建隔离区使用系统 Python，只升级虚拟环境中的版本不够。Debian / Ubuntu 可安装以下依赖：
 
 ```sh
 sudo apt-get install python3 bash bubblewrap fakeroot squashfs-tools patch rsync binutils curl
