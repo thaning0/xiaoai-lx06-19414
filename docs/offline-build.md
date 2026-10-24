@@ -63,6 +63,8 @@ python3 tools/lx06_offline_build.py --squashfs build/stock-19414/root.squashfs -
 | `build/outputs/base/work/candidate.tree-audit.json` | 重新解包后的完整检查结果 |
 
 基础镜像直接安装当前仓库的 `api/`，包括独立于 Home Assistant 的本地控制页面。
+LX06 1.94.14 profile 同时安装有界 BusyBox 日志与崩溃摘要策略；输入软件包必须包含 BusyBox 1.36.1 及对应日志 applet。日志保留和已刷设备迁移限制见[网页消失排障](troubleshooting.md#网页运行几十分钟后消失但-ssh-仍正常)。
+固定 release 的 Squeezelite init 在复制后另经当前 profile 的精确补丁处理：默认不随开机启动，保留程序和手动启动，使用 `/data/squeezelite-autostart` 文件选择开机启动。该策略也在最终树和诊断重放中校验，仅修改软件包配方不会生效。
 
 ## 4. 加入 Wi-Fi 配置与启动诊断
 

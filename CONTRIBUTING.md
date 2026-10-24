@@ -4,7 +4,7 @@
 
 ## 本地检查
 
-需要 Python 3.11+、Bash 和 Node.js。打包测试还需要 `squashfs-tools`、`fakeroot`；完整镜像构建的依赖见[构建指南](docs/offline-build.md)。
+需要 Python 3.11+、Bash 和 Node.js。打包测试还需要 `squashfs-tools`、`fakeroot`；日志容量测试需要原生 `busybox` 和 `bubblewrap`，可用 `LX06_HOST_BUSYBOX` 指定原生 BusyBox 路径。测试只在独立 mount/IPC namespace 启动 syslogd，模拟内核日志输入，不读取宿主内核日志或运行 klogd。完整镜像构建的依赖见[构建指南](docs/offline-build.md)。
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v

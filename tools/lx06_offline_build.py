@@ -27,7 +27,7 @@ LIMIT = 41943040
 REQUIRED = ('usr/bin/bluealsa', 'usr/bin/bluealsa-aplay', 'usr/bin/bluetoothd',
             'usr/bin/bluetoothctl', 'usr/bin/dbus-daemon', 'usr/bin/aplay',
             'usr/bin/ogg123', 'usr/bin/mpg123', 'usr/bin/mpd', 'usr/bin/snapclient',
-            'usr/bin/shairport-sync', 'usr/bin/upmpdcli', 'usr/bin/squeezelite')
+            'usr/bin/shairport-sync', 'usr/bin/upmpdcli', 'usr/bin/squeezelite', 'bin/busybox')
 PROTECTED = ('lib/modules', 'lib/firmware', 'etc/wifi', 'etc/bt', 'etc/sn_head_list',
              'usr/share/mico.l06a',
              'usr/sbin/mlanutl', 'usr/sbin/rtwpriv', 'usr/sbin/rtlbtmp')
@@ -114,6 +114,10 @@ def overlay_check(value):
     for name, version in (('usr/bin/bluealsa', b'4.3.0\0'), ('usr/bin/bluetoothd', b'5.71\0')):
         if version not in virtual_file(root, name).read_bytes():
             raise PrerequisiteError(f'staged {name} must match repository package version {version[:-1].decode()}')
+    busybox = virtual_file(root, 'bin/busybox').read_bytes()
+    if any(token not in busybox for token in
+           (b'BusyBox v1.36.1', b'syslogd\0', b'klogd\0', b'logread\0', b'logger\0')):
+        raise PrerequisiteError('BusyBox 1.36.1 with syslogd/klogd/logread/logger required')
     return root, entries
 
 
@@ -286,6 +290,8 @@ def inside_worker(epoch):
         # Execute the repository's host patch scripts, NEVER firmware scripts.
         subprocess.run(['/bin/sh', str(script)], check=True, env=env)
     profile.invariants(root)
+    profile.logging_invariants(root, startup=True)
+    profile.squeezelite_invariants(root, startup=True)
     overlay_check(root) # Required staged programs must survive the standard cleanup.
     import lx06_elf_audit
     dependencies = lx06_elf_audit.audit(root)

@@ -1,0 +1,12 @@
+--- a/etc/init.d/squeezelite
++++ b/etc/init.d/squeezelite
+@@ -64,3 +64,9 @@
+ restart() {
+ 	reload_service
+ }
++
++# LX06 128 MB: keep the optional LMS client available on demand.
++boot() {
++    if [ -f /data/squeezelite-autostart ]; then start "$@"; fi
++    return 0
++}

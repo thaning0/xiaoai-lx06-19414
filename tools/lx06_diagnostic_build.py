@@ -228,6 +228,8 @@ def worker():
         n for n, (_, new) in PERMISSION_REPAIRS.items() if before[n][1] != new}
     repair_permissions(root)
     modify(root, work/'wifi.conf', Path('/repo/diagnostic/lx06-diagnostic.sh'))
+    common.profile.logging_invariants(root, startup=True)
+    common.profile.squeezelite_invariants(root, startup=True)
     after = inventory(root)
     changed = {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
     if changed != required:
@@ -243,6 +245,8 @@ def worker():
         raise ValueError('re-extracted changed-file inventory mismatch: '+repr(sorted(extracted_change ^ required)))
     if after != again:
         raise ValueError('packed tree differs from input tree')
+    common.profile.logging_invariants(verified, startup=True)
+    common.profile.squeezelite_invariants(verified, startup=True)
     summary = []
     for name in sorted(changed):
         record = {'path': name, 'kind': after[name][0], 'mode': oct(after[name][1]) if after[name][0] != 'link' else None}

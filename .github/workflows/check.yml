@@ -11,7 +11,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Host tools only
-        run: sudo apt-get update && sudo apt-get install -y squashfs-tools fakeroot bubblewrap patch rsync binutils apparmor
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools fakeroot bubblewrap patch rsync binutils apparmor busybox
       - name: Allow bubblewrap user namespaces on this disposable runner
         # Ubuntu 24.04 requires an application profile for unprivileged userns.
         # https://documentation.ubuntu.com/release-notes/24.04/

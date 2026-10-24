@@ -16,9 +16,70 @@ except ImportError:
 PROFILE = compat.REPO / 'profiles/lx06/1.94.14'
 
 
+def logging_invariants(root, *, startup=False):
+    """Check after package copies too: an overlay must not undo the log policy."""
+    manifest = json.loads((PROFILE / 'manifest.json').read_text())
+    for name in ('etc/init.d/syslog-ng', 'usr/bin/coredump.sh'):
+        path = compat.confined_file(root, name)
+        if digest(path) != manifest['targets'][name]['result_sha256']:
+            raise ValueError('profile invariant: bounded logging changed: ' + name)
+        if not path.stat().st_mode & 0o111:
+            raise ValueError('profile invariant: logging script not executable: ' + name)
+    if startup:
+        link = root/'etc/rc.d/S50syslog-ng'
+        if not link.is_symlink() or os.readlink(link) != '../init.d/syslog-ng':
+            raise ValueError('profile invariant: bounded logging startup link changed')
+    return 'passed'
+
+
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def squeezelite_invariants(root, *, startup=False):
+    policy = json.loads((PROFILE/'manifest.json').read_text())['squeezelite_policy']
+    path = compat.confined_file(root, 'etc/init.d/squeezelite')
+    if digest(path) != policy['result_sha256'] or not path.stat().st_mode & 0o111:
+        raise ValueError('profile invariant: Squeezelite opt-in policy changed')
+    if startup:
+        link = root/'etc/rc.d/S99squeezelite'
+        if not link.is_symlink() or os.readlink(link) != '../init.d/squeezelite':
+            raise ValueError('profile invariant: Squeezelite startup link changed')
+        program = compat.confined_file(root, 'usr/bin/squeezelite')
+        if not program.stat().st_mode & 0o111:
+            raise ValueError('profile invariant: Squeezelite program not executable')
+    return 'passed'
+
+
+def apply_lowmem(rootfs):
+    """The release supplies this init, so patch AFTER package/include copies."""
+    root = root_path(rootfs)
+    if not selected(root):
+        raise ValueError('Squeezelite policy requires LX06 1.94.14')
+    policy = json.loads((PROFILE/'manifest.json').read_text())['squeezelite_policy']
+    patch = PROFILE/'squeezelite.patch'
+    name = 'etc/init.d/squeezelite'
+    source = compat.confined_file(root, name)
+    if digest(patch) != policy['patch_sha256'] or digest(source) != policy['sha256']:
+        raise ValueError('Squeezelite policy patch/preimage mismatch')
+    compat.validate_patch(patch, root)
+    names = {line[6:].split('\t')[0] for line in patch.read_text().splitlines()
+             if line.startswith(('--- a/', '+++ b/'))}
+    if names != {name}:
+        raise ValueError('Squeezelite policy patch target mismatch')
+    with tempfile.TemporaryDirectory(prefix='.lx06-lowmem-', dir=root.parent) as temporary:
+        stage = Path(temporary)
+        target = stage/name
+        target.parent.mkdir(parents=True)
+        shutil.copy2(source, target)
+        subprocess.run(['/usr/bin/patch', '-p1', '--batch', '--forward', '--fuzz=0',
+                        '--no-backup-if-mismatch', '-r', '-', '-i', str(patch)],
+                       cwd=stage, capture_output=True, text=True, check=True)
+        subprocess.run(['/bin/bash', '-n', str(target)], capture_output=True, check=True)
+        squeezelite_invariants(stage)
+        os.replace(target, source)
+    return {'status': 'squeezelite-opt-in-validated'}
 
 
 def root_path(value):
@@ -95,6 +156,7 @@ def invariants(root):
         text = read(name)
         require('dtsladspa' not in text and 'slave.pcm dtsaudio' not in text and
                 'pcm "hw:0,2"' in text, 'ALSA hardware path without DTS dependency')
+    logging_invariants(root)
     return 'passed'
 
 
@@ -114,7 +176,7 @@ def apply(rootfs, profile=PROFILE):
         for name, hashes in manifest['targets'].items():
             if digest(stage / name) != hashes['result_sha256']:
                 raise ValueError(f'postimage mismatch: {name}')
-            if name.startswith(('etc/init.d/', 'usr/sbin/')) or name == 'bin/wpa_action.sh':
+            if name.startswith(('etc/init.d/', 'usr/sbin/')) or name in ('bin/wpa_action.sh', 'usr/bin/coredump.sh'):
                 subprocess.run(['/bin/bash', '-n', str(stage / name)], env=env, check=True,
                                capture_output=True, text=True)
         invariants(stage)
@@ -144,7 +206,7 @@ def check_profile(rootfs):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['select', 'check', 'apply', 'invariants'])
+    parser.add_argument('action', choices=['select', 'check', 'apply', 'invariants', 'lowmem'])
     parser.add_argument('rootfs')
     args = parser.parse_args()
     try:
@@ -154,6 +216,8 @@ def main():
             report = check_profile(args.rootfs)
         elif args.action == 'invariants':
             report = {'status': invariants(root_path(args.rootfs))}
+        elif args.action == 'lowmem':
+            report = apply_lowmem(args.rootfs)
         else:
             report = apply(args.rootfs)
     except Exception as exc:

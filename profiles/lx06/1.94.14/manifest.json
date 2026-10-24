@@ -9,7 +9,7 @@
   },
   "metadata_sha256": "5bfc394b9585b8f554130277a61cb31d574f9b1262aa08ebd577c55951b743c7",
   "source_squashfs_sha256": "bdcac4449491bfaa9b3960ee006fd6e4932a9dae4473736fc808564d5eab7439",
-  "patch_sha256": "901f3137fc599ddea05f242d2e54f44e2ef504bbdca98aadbd99a84550dd811c",
+  "patch_sha256": "2534d26fab6a1d483989bae9719d71d80e73ea61ff75e46ccfeee88e2d00bef8",
   "targets": {
     "etc/config/dropbear": {
       "sha256": "35f340f5019f104bb894354b4033df660a6de6d8cbfb84ada87dea249d881175",
@@ -83,6 +83,14 @@
     "bin/wpa_action.sh": {
       "sha256": "12c650be572c53f779fdd710d303095279995ea26f5a1c02992acb00e1ae3b19",
       "result_sha256": "1e7b4589e4d9728b122d5a22d8e1ebc3d8d579fe6988f7b37e7e0c7dc9722922"
+    },
+    "etc/init.d/syslog-ng": {
+      "sha256": "fcd7978af71d2f69fe1c6d9c4513ca190ff1f8823f45ea52ea0b7256586bd96b",
+      "result_sha256": "07ef488a5e4f7118b0b29617181e194b161c9ff6baae102facf5052af86e9c3b"
+    },
+    "usr/bin/coredump.sh": {
+      "sha256": "1ef07aceb95d2552695d4ef5632b754bdffce51aa13b6a028edb20b10dedd690",
+      "result_sha256": "d17e4fdf92cc679ed1f5744ae4ee3bc08099067b90bbc70ea62c4711d0cbf08b"
     }
   },
   "upstream_base": "c26bef82ed703b50e1c04b618b0f3106061dd301",
@@ -91,5 +99,10 @@
     "md5": "b66fe108ee32afdfaf020cace7185fc5",
     "sha256": "38428e73499ad832dd42c13492b391aa369b9c41d69fd46106707e671a84e27f",
     "cryptographic_signature_verified": false
+  },
+  "squeezelite_policy": {
+    "patch_sha256": "506f46898a33daaaa5d66a14077aa219eeaa43a84e264d24c293e6cb408827af",
+    "sha256": "4a771f52f0e11f3541206c913608b94d5e48975801b05e698ca21937019c870f",
+    "result_sha256": "41078229f62cb910e43b3d6c03ef6b5660a997403a7fb450aaf3b0a0281a90eb"
   }
 }
